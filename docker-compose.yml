@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  wordpress:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: toysport-wordpress
+    restart: unless-stopped
+    ports:
+      - "8089:80"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: toysport
+      WORDPRESS_DB_PASSWORD: toysport123
+      WORDPRESS_DB_NAME: toysport_db
+      WORDPRESS_DEBUG: 1
+      WORDPRESS_TABLE_PREFIX: wp_
+    volumes:
+      - ./wordpress:/var/www/html
+    depends_on:
+      - db
+    networks:
+      - toysport-network
+
+  db:
+    image: mysql:8.0
+    container_name: toysport-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: toysport_db
+      MYSQL_USER: toysport
+      MYSQL_PASSWORD: toysport123
+      MYSQL_ROOT_PASSWORD: rootpassword123
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - toysport-network
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: toysport-phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8088:80"
+    environment:
+      PMA_HOST: db
+      PMA_USER: toysport
+      PMA_PASSWORD: toysport123
+    depends_on:
+      - db
+    networks:
+      - toysport-network
+
+volumes:
+  db_data:
+
+networks:
+  toysport-network:
+    driver: bridge
