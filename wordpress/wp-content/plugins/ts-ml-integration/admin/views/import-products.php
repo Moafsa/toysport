@@ -42,7 +42,7 @@ $current_account_id = isset($_GET['account_id']) ? intval($_GET['account_id']) :
         </div>
 
         <!-- Products Table -->
-        <table class="wp-list-table widefat fixed striped">
+        <table class="wp-list-table widefat striped ts-ml-import-table">
             <thead>
                 <tr>
                     <th scope="col" id="cb" class="manage-column column-cb check-column">

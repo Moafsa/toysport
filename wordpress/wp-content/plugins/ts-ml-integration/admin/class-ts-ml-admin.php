@@ -306,8 +306,11 @@ class TS_ML_Admin
         $search_results = $api_handler->api_request('/users/' . $user_id . '/items/search', 'GET', $search_params, $access_token);
 
         if (is_wp_error($search_results)) {
+            error_log('TS ML Debug - Search Error: ' . $search_results->get_error_message());
             wp_send_json_error($search_results->get_error_message());
         }
+
+        error_log('TS ML Debug - Search Results for User ' . $user_id . ': ' . print_r($search_results, true));
 
         if (empty($search_results['results'])) {
             wp_send_json_success(array('results' => array(), 'paging' => array('total' => 0, 'offset' => 0, 'limit' => $limit)));
