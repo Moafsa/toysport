@@ -50,6 +50,10 @@ class TS_ML_Admin
     {
         add_action('admin_menu', array($this, 'add_admin_menu'));
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_scripts'));
+
+        // AJAX Handlers for Import
+        add_action('wp_ajax_ts_ml_fetch_items', array($this, 'ajax_fetch_items'));
+        add_action('wp_ajax_ts_ml_import_single_item', array($this, 'ajax_import_single_item'));
     }
 
     /**
@@ -248,5 +252,137 @@ class TS_ML_Admin
     public function render_attribute_mapping_page()
     {
         include TS_ML_PLUGIN_DIR . 'admin/views/attribute-mapping.php';
+    }
+
+    /**
+     * Render import page
+     */
+    public function render_import_page()
+    {
+        include TS_ML_PLUGIN_DIR . 'admin/views/import-products.php';
+    }
+
+    /**
+     * AJAX Fetch items from Mercado Livre
+     */
+    public function ajax_fetch_items()
+    {
+        check_ajax_referer('ts_ml_import_nonce', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(__('Permissão negada.', 'ts-ml-integration'));
+        }
+
+        $account_id = isset($_POST['account_id']) ? intval($_POST['account_id']) : 0;
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        $limit = isset($_POST['limit']) ? intval($_POST['limit']) : 20;
+
+        if (empty($account_id)) {
+            wp_send_json_error(__('Conta não especificada.', 'ts-ml-integration'));
+        }
+
+        $api_handler = TS_ML_API_Handler::instance();
+        $access_token = $api_handler->get_valid_token($account_id);
+
+        if (is_wp_error($access_token)) {
+            wp_send_json_error($access_token->get_error_message());
+        }
+
+        // 1. Get User ID for this account
+        $user_info = $api_handler->get_user_info($access_token);
+        if (is_wp_error($user_info)) {
+            wp_send_json_error(__('Erro ao obter informações do usuário:', 'ts-ml-integration') . ' ' . $user_info->get_error_message());
+        }
+
+        $user_id = $user_info['id'];
+
+        // 2. Search items
+        $search_params = array(
+            'seller_id' => $user_id,
+            'offset' => $offset,
+            'limit' => $limit,
+        );
+
+        $search_results = $api_handler->api_request('/users/' . $user_id . '/items/search', 'GET', $search_params, $access_token);
+
+        if (is_wp_error($search_results)) {
+            wp_send_json_error($search_results->get_error_message());
+        }
+
+        if (empty($search_results['results'])) {
+            wp_send_json_success(array('results' => array(), 'paging' => array('total' => 0, 'offset' => 0, 'limit' => $limit)));
+        }
+
+        // 3. Get multiget items data
+        $ids = implode(',', $search_results['results']);
+        $items_data = $api_handler->api_request('/items', 'GET', array('ids' => $ids), $access_token);
+
+        if (is_wp_error($items_data)) {
+            wp_send_json_error($items_data->get_error_message());
+        }
+
+        // Format results
+        $formatted_results = array();
+        foreach ($items_data as $item_resp) {
+            $item = $item_resp['body'];
+
+            // Check if already synced
+            global $wpdb;
+            $table_products = $wpdb->prefix . 'ts_ml_products';
+            $sync_record = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM $table_products WHERE ml_item_id = %s AND account_id = %d",
+                $item['id'],
+                $account_id
+            ));
+
+            $woo_status = '-';
+            if ($sync_record) {
+                $woo_status = sprintf('<a href="%s" target="_blank">#%d</a>', get_edit_post_link($sync_record->product_id), $sync_record->product_id);
+            }
+
+            $formatted_results[] = array(
+                'id' => $item['id'],
+                'title' => $item['title'],
+                'thumbnail' => $item['thumbnail'],
+                'price' => $item['price'],
+                'currency_id' => $item['currency_id'],
+                'status' => $item['status'],
+                'seller_custom_field' => $item['seller_custom_field'] ?? '',
+                'woo_status' => $woo_status,
+            );
+        }
+
+        wp_send_json_success(array(
+            'results' => $formatted_results,
+            'paging' => $search_results['paging']
+        ));
+    }
+
+    /**
+     * AJAX Import single item
+     */
+    public function ajax_import_single_item()
+    {
+        check_ajax_referer('ts_ml_import_nonce', 'nonce');
+
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(__('Permissão negada.', 'ts-ml-integration'));
+        }
+
+        $ml_id = isset($_POST['ml_id']) ? sanitize_text_field($_POST['ml_id']) : '';
+        $account_id = isset($_POST['account_id']) ? intval($_POST['account_id']) : 0;
+
+        if (empty($ml_id) || empty($account_id)) {
+            wp_send_json_error(__('Dados insuficientes.', 'ts-ml-integration'));
+        }
+
+        $product_sync = TS_ML_Product_Sync::instance();
+        $result = $product_sync->import_product_from_ml($ml_id, $account_id);
+
+        if ($result) {
+            wp_send_json_success();
+        } else {
+            wp_send_json_error(__('Erro ao importar produto.', 'ts-ml-integration'));
+        }
     }
 }
