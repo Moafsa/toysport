@@ -43,7 +43,25 @@ if (isset($_GET['sync_product']) && isset($_GET['account_id']) && check_admin_re
 // Get accounts
 global $wpdb;
 $table_accounts = $wpdb->prefix . 'ts_ml_accounts';
-$accounts = $wpdb->get_results("SELECT * FROM $table_accounts WHERE is_active = 1");
+
+// Check if table exists first
+$table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_accounts'");
+$accounts = array();
+
+if ($table_exists) {
+    // Get ALL accounts (not just active ones) - user can have accounts being configured
+    $all_accounts = $wpdb->get_results("SELECT * FROM $table_accounts ORDER BY created_at DESC");
+    
+    // Filter active accounts for display
+    $accounts = array_filter($all_accounts, function($account) {
+        return !empty($account->is_active) && $account->is_active == 1;
+    });
+    
+    // If no active accounts but we have accounts, show them anyway (they might be in setup)
+    if (empty($accounts) && !empty($all_accounts)) {
+        $accounts = $all_accounts;
+    }
+}
 
 // Get selected account
 $selected_account = isset($_GET['account_id']) ? intval($_GET['account_id']) : (!empty($accounts) ? $accounts[0]->id : 0);
@@ -73,11 +91,39 @@ $table_products = $wpdb->prefix . 'ts_ml_products';
     <h1><?php esc_html_e('Produtos - Mercado Livre', 'ts-ml-integration'); ?></h1>
     
     <div class="ts-ml-products-page">
-        <?php if (empty($accounts)) { ?>
+        <?php 
+        // Debug information (only show if debug mode is enabled)
+        if (get_option('ts_ml_debug_mode') === 'yes') {
+            echo '<div class="notice notice-info">';
+            echo '<p><strong>Debug Info:</strong></p>';
+            echo '<ul>';
+            echo '<li>Tabela existe: ' . ($table_exists ? 'Sim' : 'Não') . '</li>';
+            if ($table_exists) {
+                $all_accounts_debug = $wpdb->get_results("SELECT id, account_name, is_active, country FROM $table_accounts");
+                echo '<li>Total de contas na tabela: ' . count($all_accounts_debug) . '</li>';
+                if (!empty($all_accounts_debug)) {
+                    echo '<li>Contas encontradas:<ul>';
+                    foreach ($all_accounts_debug as $acc) {
+                        echo '<li>ID: ' . esc_html($acc->id) . ', Nome: ' . esc_html($acc->account_name) . ', Ativa: ' . ($acc->is_active ? 'Sim' : 'Não') . ', País: ' . esc_html($acc->country) . '</li>';
+                    }
+                    echo '</ul></li>';
+                }
+            }
+            echo '<li>Contas filtradas (ativas): ' . count($accounts) . '</li>';
+            echo '</ul>';
+            echo '</div>';
+        }
+        
+        if (empty($accounts)) { ?>
             <div class="notice notice-warning">
                 <p><?php esc_html_e('Nenhuma conta do Mercado Livre configurada. Configure uma conta em', 'ts-ml-integration'); ?> 
                    <a href="<?php echo esc_url(admin_url('admin.php?page=ts-ml-settings')); ?>"><?php esc_html_e('Configurações', 'ts-ml-integration'); ?></a>
                 </p>
+                <?php if (!$table_exists) { ?>
+                    <p><strong><?php esc_html_e('⚠️ A tabela de contas não existe!', 'ts-ml-integration'); ?></strong> 
+                       <?php esc_html_e('Por favor, vá em Configurações e clique em "Criar Tabelas Agora".', 'ts-ml-integration'); ?>
+                    </p>
+                <?php } ?>
             </div>
         <?php } else { ?>
             

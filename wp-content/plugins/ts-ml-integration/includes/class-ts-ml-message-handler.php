@@ -12,81 +12,86 @@ if (!defined('ABSPATH')) {
 /**
  * Message Handler class
  */
-class TS_ML_Message_Handler {
-    
+class TS_ML_Message_Handler
+{
+
     /**
      * Instance
      *
      * @var TS_ML_Message_Handler
      */
     private static $instance = null;
-    
+
     /**
      * Get instance
      *
      * @return TS_ML_Message_Handler
      */
-    public static function instance() {
+    public static function instance()
+    {
         if (is_null(self::$instance)) {
             self::$instance = new self();
         }
         return self::$instance;
     }
-    
+
     /**
      * Constructor
      */
-    private function __construct() {
+    private function __construct()
+    {
         // Constructor
     }
-    
+
     /**
      * Sync account messages
      *
      * @param int $account_id Account ID
      * @return bool
      */
-    public function sync_account_messages($account_id) {
+    public function sync_account_messages($account_id)
+    {
         $api_handler = TS_ML_API_Handler::instance();
         $access_token = $api_handler->get_valid_token($account_id);
-        
+
         if (is_wp_error($access_token)) {
             return false;
         }
-        
+
         // Get messages from ML
         $messages = $this->get_ml_messages($access_token);
-        
+
         foreach ($messages as $ml_message) {
             $this->import_message_from_ml($ml_message, $account_id);
         }
-        
+
         return true;
     }
-    
+
     /**
      * Get messages from Mercado Livre
      *
      * @param string $access_token Access token
      * @return array
      */
-    private function get_ml_messages($access_token) {
+    private function get_ml_messages($access_token)
+    {
         $api_handler = TS_ML_API_Handler::instance();
-        
+
         $response = $api_handler->api_request(
             '/messages/received',
             'GET',
             array('status' => 'unread'),
             $access_token
         );
-        
+
         if (is_wp_error($response)) {
             return array();
         }
-        
+
         return isset($response['results']) ? $response['results'] : array();
     }
-    
+
     /**
      * Import message from Mercado Livre
      *
@@ -94,21 +99,22 @@ class TS_ML_Message_Handler {
      * @param int $account_id Account ID
      * @return int|false Message ID or false
      */
-    private function import_message_from_ml($ml_message, $account_id) {
+    private function import_message_from_ml($ml_message, $account_id)
+    {
         global $wpdb;
         $table_messages = $wpdb->prefix . 'ts_ml_messages';
-        
+
         // Check if message already exists
         $existing = $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM $table_messages WHERE ml_message_id = %s AND account_id = %d",
             $ml_message['id'],
             $account_id
         ));
-        
+
         if ($existing) {
             return $existing->id;
         }
-        
+
         // Insert message
         $wpdb->insert(
             $table_messages,
@@ -125,32 +131,39 @@ class TS_ML_Message_Handler {
             ),
             array('%d', '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s')
         );
-        
-        return $wpdb->insert_id;
+        $message_id = $wpdb->insert_id;
+
+        // Auto-reply 100% automático se a IA estiver habilitada
+        if (get_option('ts_ml_ai_enabled') === 'yes') {
+            $this->send_reply($message_id, '');
+        }
+
+        return $message_id;
     }
-    
+
     /**
      * Get product ID from message
      *
      * @param array $ml_message ML message data
      * @return int|false
      */
-    private function get_product_id_from_message($ml_message) {
+    private function get_product_id_from_message($ml_message)
+    {
         if (isset($ml_message['resource']) && isset($ml_message['resource']['item_id'])) {
             global $wpdb;
             $table_products = $wpdb->prefix . 'ts_ml_products';
-            
+
             $product_id = $wpdb->get_var($wpdb->prepare(
                 "SELECT product_id FROM $table_products WHERE ml_item_id = %s LIMIT 1",
                 $ml_message['resource']['item_id']
             ));
-            
+
             return $product_id ? intval($product_id) : false;
         }
-        
+
         return false;
     }
-    
+
     /**
      * Send reply to Mercado Livre
      *
@@ -158,32 +171,33 @@ class TS_ML_Message_Handler {
      * @param string $reply_text Reply text
      * @return bool
      */
-    public function send_reply($message_id, $reply_text) {
+    public function send_reply($message_id, $reply_text)
+    {
         global $wpdb;
         $table_messages = $wpdb->prefix . 'ts_ml_messages';
-        
+
         $message = $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM $table_messages WHERE id = %d",
             $message_id
         ));
-        
+
         if (!$message) {
             return false;
         }
-        
+
         $api_handler = TS_ML_API_Handler::instance();
         $access_token = $api_handler->get_valid_token($message->account_id);
-        
+
         if (is_wp_error($access_token)) {
             return false;
         }
-        
+
         // Use AI if enabled
         if (get_option('ts_ml_ai_enabled') === 'yes') {
             $ai_integration = TS_ML_AI_Integration::instance();
             $reply_text = $ai_integration->generate_reply($message->message_text, $reply_text);
         }
-        
+
         // Send reply via ML API
         $response = $api_handler->api_request(
             '/messages',
@@ -196,11 +210,11 @@ class TS_ML_Message_Handler {
             ),
             $access_token
         );
-        
+
         if (is_wp_error($response)) {
             return false;
         }
-        
+
         // Update message status
         $wpdb->update(
             $table_messages,
@@ -210,7 +224,7 @@ class TS_ML_Message_Handler {
             ),
             array('id' => $message_id)
         );
-        
+
         return true;
     }
 }

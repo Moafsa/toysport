@@ -18,14 +18,27 @@ class TS_ML_Install {
      * Activate plugin
      */
     public static function activate() {
+        // Clear any old scheduled events first
+        self::clear_scheduled_events();
+        
         // Create database tables
         self::create_tables();
         
         // Set default options
         self::set_default_options();
         
+        // Set plugin version (if first install)
+        $current_version = get_option('ts_ml_version');
+        if (!$current_version) {
+            add_option('ts_ml_version', TS_ML_VERSION);
+        }
+        
         // Schedule cron events
         self::schedule_events();
+        
+        // Register webhook rewrite rule
+        add_rewrite_rule('^ts-ml-webhook/?$', 'index.php?ts_ml_webhook=1', 'top');
+        add_rewrite_tag('%ts_ml_webhook%', '([^&]+)');
         
         // Flush rewrite rules
         flush_rewrite_rules();
@@ -45,7 +58,7 @@ class TS_ML_Install {
     /**
      * Create database tables
      */
-    private static function create_tables() {
+    public static function create_tables() {
         global $wpdb;
         
         $charset_collate = $wpdb->get_charset_collate();
@@ -182,6 +195,9 @@ class TS_ML_Install {
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         
+        // Suppress errors during table creation, but log them
+        $suppress = $wpdb->suppress_errors(true);
+        
         dbDelta($sql_settings);
         dbDelta($sql_accounts);
         dbDelta($sql_products);
@@ -189,6 +205,56 @@ class TS_ML_Install {
         dbDelta($sql_messages);
         dbDelta($sql_logs);
         dbDelta($sql_schedules);
+        
+        $wpdb->suppress_errors($suppress);
+        
+        // Verify tables were created
+        $tables_to_check = array(
+            $wpdb->prefix . 'ts_ml_settings',
+            $wpdb->prefix . 'ts_ml_accounts',
+            $wpdb->prefix . 'ts_ml_products',
+            $wpdb->prefix . 'ts_ml_orders',
+            $wpdb->prefix . 'ts_ml_messages',
+            $wpdb->prefix . 'ts_ml_sync_logs',
+            $wpdb->prefix . 'ts_ml_schedules',
+        );
+        
+        $missing_tables = array();
+        foreach ($tables_to_check as $table) {
+            $exists = $wpdb->get_var("SHOW TABLES LIKE '$table'");
+            if (!$exists) {
+                $missing_tables[] = $table;
+            }
+        }
+        
+        // If tables are missing, try creating them directly
+        if (!empty($missing_tables)) {
+            foreach ($missing_tables as $table) {
+                switch ($table) {
+                    case $wpdb->prefix . 'ts_ml_settings':
+                        $wpdb->query($sql_settings);
+                        break;
+                    case $wpdb->prefix . 'ts_ml_accounts':
+                        $wpdb->query($sql_accounts);
+                        break;
+                    case $wpdb->prefix . 'ts_ml_products':
+                        $wpdb->query($sql_products);
+                        break;
+                    case $wpdb->prefix . 'ts_ml_orders':
+                        $wpdb->query($sql_orders);
+                        break;
+                    case $wpdb->prefix . 'ts_ml_messages':
+                        $wpdb->query($sql_messages);
+                        break;
+                    case $wpdb->prefix . 'ts_ml_sync_logs':
+                        $wpdb->query($sql_logs);
+                        break;
+                    case $wpdb->prefix . 'ts_ml_schedules':
+                        $wpdb->query($sql_schedules);
+                        break;
+                }
+            }
+        }
     }
     
     /**
@@ -218,28 +284,25 @@ class TS_ML_Install {
      * Schedule cron events
      */
     private static function schedule_events() {
-        if (!wp_next_scheduled('ts_ml_sync_products')) {
-            wp_schedule_event(time(), 'hourly', 'ts_ml_sync_products');
-        }
+        // Only schedule if auto sync is enabled (will be checked in the cron handler)
+        $events = array(
+            'ts_ml_sync_products' => 'hourly',
+            'ts_ml_sync_orders' => 'hourly',
+            'ts_ml_sync_stock' => 'hourly',
+            'ts_ml_sync_prices' => 'hourly',
+            'ts_ml_check_messages' => 'hourly',
+            'ts_ml_update_shipping' => 'hourly',
+        );
         
-        if (!wp_next_scheduled('ts_ml_sync_orders')) {
-            wp_schedule_event(time(), 'hourly', 'ts_ml_sync_orders');
-        }
-        
-        if (!wp_next_scheduled('ts_ml_sync_stock')) {
-            wp_schedule_event(time(), 'hourly', 'ts_ml_sync_stock');
-        }
-        
-        if (!wp_next_scheduled('ts_ml_sync_prices')) {
-            wp_schedule_event(time(), 'hourly', 'ts_ml_sync_prices');
-        }
-        
-        if (!wp_next_scheduled('ts_ml_check_messages')) {
-            wp_schedule_event(time(), 'hourly', 'ts_ml_check_messages');
-        }
-        
-        if (!wp_next_scheduled('ts_ml_update_shipping')) {
-            wp_schedule_event(time(), 'hourly', 'ts_ml_update_shipping');
+        foreach ($events as $hook => $recurrence) {
+            // Clear any existing scheduled events for this hook
+            $timestamp = wp_next_scheduled($hook);
+            if ($timestamp !== false) {
+                wp_unschedule_event($timestamp, $hook);
+            }
+            
+            // Schedule new event
+            wp_schedule_event(time(), $recurrence, $hook);
         }
     }
     

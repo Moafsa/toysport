@@ -16,12 +16,57 @@
 .ts-ml-account-card {
     border: 1px solid #ddd;
     border-radius: 4px;
-    padding: 20px;
+    padding: 0;
     background: #fff;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
-.ts-ml-account-card h3 {
-    margin-top: 0;
+.ts-ml-account-card-header {
+    background: #f8f9fa;
+    padding: 15px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.ts-ml-account-card-header h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.ts-ml-account-details,
+.ts-ml-account-connection {
+    padding: 0 15px 15px;
+}
+
+.ts-ml-account-details p {
+    margin: 8px 0;
+    font-size: 13px;
+}
+
+.ts-ml-account-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.ts-ml-account-actions .button-link-delete {
+    color: #b32d2e;
+    padding: 0;
+    line-height: 2.2;
+}
+
+.ts-ml-account-actions .button-link-delete:hover {
+    color: #d63638;
+}
+
+.ts-ml-edit-account-form {
+    background: #fffcf5;
+    padding: 15px;
+    border-top: 1px solid #ffe8c3;
+    border-bottom: 1px solid #ffe8c3;
 }
 
 .ts-ml-products-page {

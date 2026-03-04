@@ -61,14 +61,26 @@ class TS_ML_Sync_Manager {
             return;
         }
         
+        // Check if WooCommerce is loaded
+        if (!class_exists('WooCommerce')) {
+            return;
+        }
+        
         $this->log_sync('products', 'started', 'Sincronização automática de produtos iniciada');
         
         // Get active accounts
         $accounts = $this->get_active_accounts();
         
+        if (empty($accounts)) {
+            $this->log_sync('products', 'skipped', 'Nenhuma conta ativa encontrada');
+            return;
+        }
+        
         foreach ($accounts as $account) {
             try {
-                TS_ML_Product_Sync::instance()->sync_account_products($account->id);
+                if (class_exists('TS_ML_Product_Sync')) {
+                    TS_ML_Product_Sync::instance()->sync_account_products($account->id);
+                }
             } catch (Exception $e) {
                 $this->log_sync('products', 'error', $e->getMessage(), $account->id);
             }
@@ -109,14 +121,24 @@ class TS_ML_Sync_Manager {
             return;
         }
         
+        if (!class_exists('WooCommerce')) {
+            return;
+        }
+        
         $this->log_sync('stock', 'started', 'Sincronização automática de estoque iniciada');
         
-        // Get active accounts
         $accounts = $this->get_active_accounts();
+        
+        if (empty($accounts)) {
+            $this->log_sync('stock', 'skipped', 'Nenhuma conta ativa encontrada');
+            return;
+        }
         
         foreach ($accounts as $account) {
             try {
-                TS_ML_Product_Sync::instance()->sync_account_stock($account->id);
+                if (class_exists('TS_ML_Product_Sync')) {
+                    TS_ML_Product_Sync::instance()->sync_account_stock($account->id);
+                }
             } catch (Exception $e) {
                 $this->log_sync('stock', 'error', $e->getMessage(), $account->id);
             }
@@ -133,14 +155,24 @@ class TS_ML_Sync_Manager {
             return;
         }
         
+        if (!class_exists('WooCommerce')) {
+            return;
+        }
+        
         $this->log_sync('prices', 'started', 'Sincronização automática de preços iniciada');
         
-        // Get active accounts
         $accounts = $this->get_active_accounts();
+        
+        if (empty($accounts)) {
+            $this->log_sync('prices', 'skipped', 'Nenhuma conta ativa encontrada');
+            return;
+        }
         
         foreach ($accounts as $account) {
             try {
-                TS_ML_Product_Sync::instance()->sync_account_prices($account->id);
+                if (class_exists('TS_ML_Product_Sync')) {
+                    TS_ML_Product_Sync::instance()->sync_account_prices($account->id);
+                }
             } catch (Exception $e) {
                 $this->log_sync('prices', 'error', $e->getMessage(), $account->id);
             }
@@ -153,14 +185,24 @@ class TS_ML_Sync_Manager {
      * Check messages cron
      */
     public function check_messages_cron() {
+        if (!class_exists('WooCommerce')) {
+            return;
+        }
+        
         $this->log_sync('messages', 'started', 'Verificação de mensagens iniciada');
         
-        // Get active accounts
         $accounts = $this->get_active_accounts();
+        
+        if (empty($accounts)) {
+            $this->log_sync('messages', 'skipped', 'Nenhuma conta ativa encontrada');
+            return;
+        }
         
         foreach ($accounts as $account) {
             try {
-                TS_ML_Message_Handler::instance()->sync_account_messages($account->id);
+                if (class_exists('TS_ML_Message_Handler')) {
+                    TS_ML_Message_Handler::instance()->sync_account_messages($account->id);
+                }
             } catch (Exception $e) {
                 $this->log_sync('messages', 'error', $e->getMessage(), $account->id);
             }
@@ -173,14 +215,24 @@ class TS_ML_Sync_Manager {
      * Update shipping cron
      */
     public function update_shipping_cron() {
+        if (!class_exists('WooCommerce')) {
+            return;
+        }
+        
         $this->log_sync('shipping', 'started', 'Atualização de envios iniciada');
         
-        // Get active accounts
         $accounts = $this->get_active_accounts();
+        
+        if (empty($accounts)) {
+            $this->log_sync('shipping', 'skipped', 'Nenhuma conta ativa encontrada');
+            return;
+        }
         
         foreach ($accounts as $account) {
             try {
-                TS_ML_Shipping_Manager::instance()->sync_account_shipping($account->id);
+                if (class_exists('TS_ML_Shipping_Manager')) {
+                    TS_ML_Shipping_Manager::instance()->sync_account_shipping($account->id);
+                }
             } catch (Exception $e) {
                 $this->log_sync('shipping', 'error', $e->getMessage(), $account->id);
             }
@@ -198,8 +250,17 @@ class TS_ML_Sync_Manager {
         global $wpdb;
         $table_accounts = $wpdb->prefix . 'ts_ml_accounts';
         
+        // Check if table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_accounts'");
+        if (!$table_exists) {
+            return array();
+        }
+        
         return $wpdb->get_results(
-            "SELECT * FROM $table_accounts WHERE is_active = 1"
+            $wpdb->prepare(
+                "SELECT * FROM $table_accounts WHERE is_active = %d",
+                1
+            )
         );
     }
     
