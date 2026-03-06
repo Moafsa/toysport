@@ -203,6 +203,8 @@ if (isset($_POST['save_settings']) && check_admin_referer('ts_ml_save_settings')
     update_option('ts_ml_auto_sync_stock', isset($_POST['auto_sync_stock']) ? 'yes' : 'no');
     update_option('ts_ml_auto_sync_prices', isset($_POST['auto_sync_prices']) ? 'yes' : 'no');
     update_option('ts_ml_auto_sync_orders', isset($_POST['auto_sync_orders']) ? 'yes' : 'no');
+    update_option('ts_ml_sync_deletions', isset($_POST['sync_deletions']) ? 'yes' : 'no');
+    update_option('ts_ml_sync_status_changes', isset($_POST['sync_status_changes']) ? 'yes' : 'no');
     update_option('ts_ml_ai_enabled', isset($_POST['ai_enabled']) ? 'yes' : 'no');
     update_option('ts_ml_ai_api_key', sanitize_text_field($_POST['ai_api_key'] ?? ''));
     update_option('ts_ml_ai_model', sanitize_text_field($_POST['ai_model'] ?? 'gpt-3.5-turbo'));
@@ -774,6 +776,32 @@ if (!isset($settings_saved)) {
                         </label>
                         <p class="description">
                             <?php esc_html_e('Importa pedidos do Mercado Livre automaticamente.', 'ts-ml-integration'); ?>
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row"><?php esc_html_e('Sincronização de Exclusão', 'ts-ml-integration'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="sync_deletions" value="1" <?php checked(get_option('ts_ml_sync_deletions'), 'yes'); ?> />
+                            <?php esc_html_e('Finalizar anúncio no ML ao excluir produto no WooCommerce', 'ts-ml-integration'); ?>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('Quando um produto for para a lixeira ou for excluído permanentemente, o anúncio vinculado no Mercado Livre será FINALIZADO (Closed).', 'ts-ml-integration'); ?>
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row"><?php esc_html_e('Sincronização de Visibilidade', 'ts-ml-integration'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="sync_status_changes" value="1" <?php checked(get_option('ts_ml_sync_status_changes'), 'yes'); ?> />
+                            <?php esc_html_e('Pausar anúncio no ML ao mudar produto para Rascunho', 'ts-ml-integration'); ?>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('Quando um produto for alterado para Rascunho ou Privado, o anúncio no Mercado Livre será PAUSADO. Ao publicar novamente, ele voltará a ficar ATIVO.', 'ts-ml-integration'); ?>
                         </p>
                     </td>
                 </tr>
