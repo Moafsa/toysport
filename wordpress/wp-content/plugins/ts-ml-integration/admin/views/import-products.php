@@ -26,18 +26,26 @@ $current_account_id = isset($_GET['account_id']) ? intval($_GET['account_id']) :
         </div>
     <?php else : ?>
 
-        <!-- Account Selector -->
+        <!-- Account Selector & Search -->
         <div class="tablenav top">
             <div class="alignleft actions">
-                <label for="filter-by-account" class="screen-reader-text"><?php esc_html_e('Filtrar por conta', 'ts-ml-integration'); ?></label>
-                <select name="account_id" id="filter-by-account">
+                <label for="filter-by-account"><?php esc_html_e('Conta p/ API:', 'ts-ml-integration'); ?></label>
+                <select name="account_id" id="filter-by-account" style="max-width: 150px;">
                     <?php foreach ($accounts as $account) : ?>
                         <option value="<?php echo esc_attr($account->id); ?>" <?php selected($current_account_id, $account->id); ?>>
-                            <?php echo esc_html($account->account_name . ' (' . $account->country . ')'); ?>
+                            <?php echo esc_html($account->account_name); ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
-                <button type="button" id="load-products" class="button action"><?php esc_html_e('Carregar Produtos', 'ts-ml-integration'); ?></button>
+
+                <select id="search-type" name="search_type" style="margin-left: 10px;">
+                    <option value="account"><?php esc_html_e('Meus Anúncios', 'ts-ml-integration'); ?></option>
+                    <option value="global"><?php esc_html_e('Todo o Mercado Livre', 'ts-ml-integration'); ?></option>
+                </select>
+
+                <input type="text" id="search-query" placeholder="<?php esc_attr_e('Palavra-chave, ID ou Link do ML...', 'ts-ml-integration'); ?>" style="width: 250px; margin-left: 10px;">
+                
+                <button type="button" id="load-products" class="button action"><?php esc_html_e('Buscar Produtos', 'ts-ml-integration'); ?></button>
             </div>
         </div>
 
@@ -103,6 +111,8 @@ jQuery(document).ready(function($) {
             data: {
                 action: 'ts_ml_fetch_items',
                 account_id: accountId,
+                search_type: $('#search-type').val(),
+                search_query: $('#search-query').val(),
                 offset: page * limit,
                 limit: limit,
                 nonce: '<?php echo wp_create_nonce('ts_ml_import_nonce'); ?>'

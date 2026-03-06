@@ -759,6 +759,12 @@ class TS_ML_Product_Sync
         global $wpdb;
         $table_products = $wpdb->prefix . 'ts_ml_products';
 
+        $existing = $wpdb->get_row($wpdb->prepare(
+            "SELECT id FROM $table_products WHERE product_id = %d AND account_id = %d",
+            $product_id,
+            $account_id
+        ));
+
         $data = array(
             'ml_item_id' => isset($ml_response['id']) ? $ml_response['id'] : null,
             'ml_listing_id' => isset($ml_response['id']) ? $ml_response['id'] : null,
@@ -767,12 +773,15 @@ class TS_ML_Product_Sync
             'updated_at' => current_time('mysql'),
         );
 
-        $where = array(
-            'product_id' => $product_id,
-            'account_id' => $account_id,
-        );
-
-        $wpdb->update($table_products, $data, $where);
+        if ($existing) {
+            $wpdb->update($table_products, $data, array('id' => $existing->id));
+        } else {
+            $data['product_id'] = $product_id;
+            $data['account_id'] = $account_id;
+            $data['created_at'] = current_time('mysql');
+            $data['sync_direction'] = 'ml_to_woo'; // Default for imported items
+            $wpdb->insert($table_products, $data);
+        }
     }
 
     /**
