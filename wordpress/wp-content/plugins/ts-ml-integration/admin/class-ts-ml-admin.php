@@ -346,7 +346,7 @@ class TS_ML_Admin
             $formatted_results[] = array(
                 'id' => $item['id'],
                 'title' => $item['title'],
-                'thumbnail' => $item['thumbnail'],
+                'thumbnail' => str_replace('http://', 'https://', $item['thumbnail']),
                 'price' => $item['price'],
                 'currency_id' => $item['currency_id'],
                 'status' => $item['status'],
