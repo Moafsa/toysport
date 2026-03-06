@@ -62,12 +62,20 @@ foreach ($accounts as $account) {
 
         // 3. Test Global Search endpoint
         $site_id = $user_info['site_id'] ?? 'MLB';
-        echo "Chamando /sites/{$site_id}/search?q=teste...\n";
+        echo "Chamando /sites/{$site_id}/search?q=teste (COM TOKEN)...\n";
         $global_search = $api_handler->api_request("/sites/{$site_id}/search", 'GET', array('q' => 'teste', 'limit' => 1), $token);
         if (is_wp_error($global_search)) {
             echo "ERRO Global Search: " . $global_search->get_error_message() . " (Status: " . ($global_search->get_error_data()['status'] ?? 'N/A') . ")\n";
         } else {
             echo "Sucesso Global Search: " . ($global_search['paging']['total'] ?? 0) . " resultados encontrados.\n";
+        }
+
+        echo "Chamando /sites/{$site_id}/search?q=teste (SEM TOKEN)...\n";
+        $global_search_no_token = $api_handler->api_request("/sites/{$site_id}/search", 'GET', array('q' => 'teste', 'limit' => 1), '');
+        if (is_wp_error($global_search_no_token)) {
+            echo "ERRO Global Search (Sem Token): " . $global_search_no_token->get_error_message() . " (Status: " . ($global_search_no_token->get_error_data()['status'] ?? 'N/A') . ")\n";
+        } else {
+            echo "Sucesso Global Search (Sem Token): " . ($global_search_no_token['paging']['total'] ?? 0) . " resultados encontrados.\n";
         }
     }
     echo "----------------------------------------\n\n";

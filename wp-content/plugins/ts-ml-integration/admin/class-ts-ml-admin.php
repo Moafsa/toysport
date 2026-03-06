@@ -329,11 +329,15 @@ class TS_ML_Admin
                     'limit' => $limit,
                 );
                 
+                // For global search, we DON'T send the access token as it often causes 403 Forbidden 
+                // on many accounts/apps that don't have the explicit global search scope.
+                $search_token = ($search_type === 'account') ? $access_token : '';
+
                 if ($search_type === 'account') {
                     $search_params['seller_id'] = $user_id;
                 }
 
-                $search_results = $api_handler->api_request('/sites/' . $site_id . '/search', 'GET', $search_params, $access_token);
+                $search_results = $api_handler->api_request("/sites/{$site_id}/search", 'GET', $search_params, $search_token);
 
                 if (is_wp_error($search_results)) {
                     wp_send_json_error($search_results->get_error_message());
@@ -394,7 +398,7 @@ class TS_ML_Admin
 
         wp_send_json_success(array(
             'results' => $formatted_results,
-            'paging' => $search_results['paging']
+            'paging' => $paging_info
         ));
     }
 
