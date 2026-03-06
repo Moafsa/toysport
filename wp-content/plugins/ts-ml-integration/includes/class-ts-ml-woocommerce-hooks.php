@@ -56,6 +56,12 @@ class TS_ML_WooCommerce_Hooks {
         
         // Price hooks
         add_action('woocommerce_product_object_updated_props', array($this, 'on_product_props_update'), 10, 2);
+
+        // Status and Deletion hooks
+        add_action('transition_post_status', array($this, 'on_status_transition'), 10, 3);
+        add_action('trashed_post', array($this, 'on_product_trash'), 10, 1);
+        add_action('untrashed_post', array($this, 'on_product_untrash'), 10, 1);
+        add_action('before_delete_post', array($this, 'on_product_delete'), 10, 1);
     }
     
     /**
@@ -204,6 +210,79 @@ class TS_ML_WooCommerce_Hooks {
         
         foreach ($accounts as $account) {
             TS_ML_Product_Sync::instance()->sync_product_price($product_id, $account->id);
+        }
+    }
+
+    /**
+     * On status transition
+     */
+    public function on_status_transition($new_status, $old_status, $post) {
+        if ($post->post_type !== 'product' || $new_status === $old_status) {
+            return;
+        }
+
+        if (get_option('ts_ml_sync_status_changes') !== 'yes') {
+            return;
+        }
+
+        $this->sync_product_status_for_all_accounts($post->ID, $new_status);
+    }
+
+    /**
+     * On product trash
+     */
+    public function on_product_trash($post_id) {
+        if (get_post_type($post_id) !== 'product') {
+            return;
+        }
+
+        if (get_option('ts_ml_sync_deletions') !== 'yes') {
+            return;
+        }
+
+        $this->sync_product_status_for_all_accounts($post_id, 'trash');
+    }
+
+    /**
+     * On product untrash
+     */
+    public function on_product_untrash($post_id) {
+        if (get_post_type($post_id) !== 'product') {
+            return;
+        }
+
+        if (get_option('ts_ml_sync_status_changes') !== 'yes') {
+            return;
+        }
+
+        $this->sync_product_status_for_all_accounts($post_id, 'publish');
+    }
+
+    /**
+     * On product delete
+     */
+    public function on_product_delete($post_id) {
+        if (get_post_type($post_id) !== 'product') {
+            return;
+        }
+
+        if (get_option('ts_ml_sync_deletions') !== 'yes') {
+            return;
+        }
+
+        $this->sync_product_status_for_all_accounts($post_id, 'deleted');
+    }
+
+    /**
+     * Sync status for all accounts
+     */
+    private function sync_product_status_for_all_accounts($product_id, $status) {
+        global $wpdb;
+        $table_accounts = $wpdb->prefix . 'ts_ml_accounts';
+        $accounts = $wpdb->get_results("SELECT id FROM $table_accounts WHERE is_active = 1");
+
+        foreach ($accounts as $account) {
+            TS_ML_Product_Sync::instance()->sync_product_status_by_woo($product_id, $account->id, $status);
         }
     }
 }

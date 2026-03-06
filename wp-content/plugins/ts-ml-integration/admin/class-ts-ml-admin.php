@@ -274,11 +274,13 @@ class TS_ML_Admin
         }
 
         $account_id = isset($_POST['account_id']) ? intval($_POST['account_id']) : 0;
+        $search_type = isset($_POST['search_type']) ? sanitize_text_field($_POST['search_type']) : 'account';
+        $search_query = isset($_POST['search_query']) ? sanitize_text_field($_POST['search_query']) : '';
         $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
         $limit = isset($_POST['limit']) ? intval($_POST['limit']) : 20;
 
         if (empty($account_id)) {
-            wp_send_json_error(__('Conta não especificada.', 'ts-ml-integration'));
+            wp_send_json_error(__('Conta não especificada para autenticação da API.', 'ts-ml-integration'));
         }
 
         $api_handler = TS_ML_API_Handler::instance();
@@ -295,29 +297,64 @@ class TS_ML_Admin
         }
 
         $user_id = $user_info['id'];
+        $site_id = $user_info['site_id'] ?? 'MLB';
 
-        // 2. Search items
-        $search_params = array(
-            'seller_id' => $user_id,
-            'offset' => $offset,
-            'limit' => $limit,
-        );
+        $items_to_fetch = array();
+        $paging_info = array('total' => 0, 'offset' => $offset, 'limit' => $limit);
 
-        $search_results = $api_handler->api_request('/users/' . $user_id . '/items/search', 'GET', $search_params, $access_token);
+        if ($search_type === 'account' && empty($search_query)) {
+            // 2a. Search items from MY account
+            $search_params = array(
+                'seller_id' => $user_id,
+                'offset' => $offset,
+                'limit' => $limit,
+            );
+            $search_results = $api_handler->api_request('/users/' . $user_id . '/items/search', 'GET', $search_params, $access_token);
+            
+            if (!is_wp_error($search_results)) {
+                $items_to_fetch = $search_results['results'] ?? array();
+                $paging_info = $search_results['paging'];
+            }
+        } else {
+            // 2b. GLOBAL SEARCH or Filtered Account Search
+            // If search_query contains a ML URL or ID like MLB123456
+            if (preg_match('/(MLB|MLM|MLA|MCO|MLC|MLU|MLV|MPE|MEC|MGT|MNI|MPY|MCR|MSV|MPA|MBO)\d+/', $search_query, $matches)) {
+                $items_to_fetch = array($matches[0]);
+                $paging_info['total'] = 1;
+            } else {
+                // Keyword search
+                $search_params = array(
+                    'q' => $search_query,
+                    'offset' => $offset,
+                    'limit' => $limit,
+                );
+                
+                if ($search_type === 'account') {
+                    $search_params['seller_id'] = $user_id;
+                }
 
-        if (is_wp_error($search_results)) {
-            error_log('TS ML Debug - Search Error: ' . $search_results->get_error_message());
-            wp_send_json_error($search_results->get_error_message());
+                $search_results = $api_handler->api_request('/sites/' . $site_id . '/search', 'GET', $search_params, $access_token);
+
+                if (is_wp_error($search_results)) {
+                    wp_send_json_error($search_results->get_error_message());
+                }
+
+                $items_to_fetch = array();
+                if (!empty($search_results['results'])) {
+                    foreach ($search_results['results'] as $res) {
+                        $items_to_fetch[] = $res['id'];
+                    }
+                }
+                $paging_info = $search_results['paging'];
+            }
         }
 
-        error_log('TS ML Debug - Search Results for User ' . $user_id . ': ' . print_r($search_results, true));
-
-        if (empty($search_results['results'])) {
-            wp_send_json_success(array('results' => array(), 'paging' => array('total' => 0, 'offset' => 0, 'limit' => $limit)));
+        if (empty($items_to_fetch)) {
+            wp_send_json_success(array('results' => array(), 'paging' => $paging_info));
         }
 
         // 3. Get multiget items data
-        $ids = implode(',', $search_results['results']);
+        $ids = implode(',', $items_to_fetch);
         $items_data = $api_handler->api_request('/items', 'GET', array('ids' => $ids), $access_token);
 
         if (is_wp_error($items_data)) {
@@ -346,7 +383,7 @@ class TS_ML_Admin
             $formatted_results[] = array(
                 'id' => $item['id'],
                 'title' => $item['title'],
-                'thumbnail' => $item['thumbnail'],
+                'thumbnail' => str_replace('http://', 'https://', $item['thumbnail']),
                 'price' => $item['price'],
                 'currency_id' => $item['currency_id'],
                 'status' => $item['status'],

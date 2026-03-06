@@ -759,6 +759,12 @@ class TS_ML_Product_Sync
         global $wpdb;
         $table_products = $wpdb->prefix . 'ts_ml_products';
 
+        $existing = $wpdb->get_row($wpdb->prepare(
+            "SELECT id FROM $table_products WHERE product_id = %d AND account_id = %d",
+            $product_id,
+            $account_id
+        ));
+
         $data = array(
             'ml_item_id' => isset($ml_response['id']) ? $ml_response['id'] : null,
             'ml_listing_id' => isset($ml_response['id']) ? $ml_response['id'] : null,
@@ -767,12 +773,15 @@ class TS_ML_Product_Sync
             'updated_at' => current_time('mysql'),
         );
 
-        $where = array(
-            'product_id' => $product_id,
-            'account_id' => $account_id,
-        );
-
-        $wpdb->update($table_products, $data, $where);
+        if ($existing) {
+            $wpdb->update($table_products, $data, array('id' => $existing->id));
+        } else {
+            $data['product_id'] = $product_id;
+            $data['account_id'] = $account_id;
+            $data['created_at'] = current_time('mysql');
+            $data['sync_direction'] = 'ml_to_woo'; // Default for imported items
+            $wpdb->insert($table_products, $data);
+        }
     }
 
     /**
@@ -1100,5 +1109,91 @@ class TS_ML_Product_Sync
         }
 
         return false;
+    }
+
+    /**
+     * Update ML item status
+     *
+     * @param int $product_id Product ID
+     * @param int $account_id Account ID
+     * @param string $status New ML status (active, paused, closed)
+     * @return bool
+     */
+    public function update_product_status($product_id, $account_id, $status)
+    {
+        global $wpdb;
+        $table_products = $wpdb->prefix . 'ts_ml_products';
+
+        $sync_record = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_products WHERE product_id = %d AND account_id = %d AND sync_status = 'synced' AND ml_item_id IS NOT NULL",
+            $product_id,
+            $account_id
+        ));
+
+        if (!$sync_record) {
+            return false;
+        }
+
+        $api_handler = TS_ML_API_Handler::instance();
+        $access_token = $api_handler->get_valid_token($account_id);
+
+        if (is_wp_error($access_token)) {
+            return false;
+        }
+
+        // Prepare data
+        $data = array('status' => $status);
+
+        // ML items cannot be reactivated if they are closed.
+        // We only send the status update.
+        $response = $api_handler->api_request(
+            '/items/' . $sync_record->ml_item_id,
+            'PUT',
+            $data,
+            $access_token
+        );
+
+        if (!is_wp_error($response)) {
+            $wpdb->update(
+                $table_products,
+                array('last_sync_at' => current_time('mysql')),
+                array('id' => $sync_record->id),
+                array('%s'),
+                array('%d')
+            );
+            TS_ML_Logger::info('Status do produto atualizado no ML', array(
+                'ml_item_id' => $sync_record->ml_item_id,
+                'status' => $status
+            ));
+            return true;
+        }
+
+        TS_ML_Logger::error('Erro ao atualizar status do produto no ML', array(
+            'ml_item_id' => $sync_record->ml_item_id,
+            'error' => $response->get_error_message()
+        ));
+
+        return false;
+    }
+
+    /**
+     * Sync product status to ML based on Woo status
+     *
+     * @param int $product_id Product ID
+     * @param int $account_id Account ID
+     * @param string $woo_status WooCommerce status
+     * @return bool
+     */
+    public function sync_product_status_by_woo($product_id, $account_id, $woo_status)
+    {
+        $ml_status = 'active';
+
+        if ($woo_status === 'trash' || $woo_status === 'deleted') {
+            $ml_status = 'closed';
+        } elseif ($woo_status === 'draft' || $woo_status === 'private' || $woo_status === 'pending') {
+            $ml_status = 'paused';
+        }
+
+        return $this->update_product_status($product_id, $account_id, $ml_status);
     }
 }
