@@ -248,6 +248,7 @@ class TS_ML_API_Handler
             'timeout' => 30,
             'headers' => array(
                 'Content-Type' => 'application/json',
+                'User-Agent' => 'TS-ML-Integration-Plugin/1.0 (WordPress)',
             ),
         );
 
@@ -273,7 +274,7 @@ class TS_ML_API_Handler
 
         if ($status_code >= 400) {
             $error_message = isset($data['message']) ? $data['message'] : 'API Error';
-            return new WP_Error('api_error', $error_message, array('status' => $status_code));
+            return new WP_Error('api_error', $error_message, array('status' => $status_code, 'body' => $body));
         }
 
         return $data;

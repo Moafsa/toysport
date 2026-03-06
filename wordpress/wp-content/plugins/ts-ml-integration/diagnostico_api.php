@@ -66,6 +66,10 @@ foreach ($accounts as $account) {
         $global_search = $api_handler->api_request("/sites/{$site_id}/search", 'GET', array('q' => 'teste', 'limit' => 1), $token);
         if (is_wp_error($global_search)) {
             echo "ERRO Global Search: " . $global_search->get_error_message() . " (Status: " . ($global_search->get_error_data()['status'] ?? 'N/A') . ")\n";
+            // Check if we have more info
+            if (isset($global_search->get_error_data()['body'])) {
+                echo "Body: " . $global_search->get_error_data()['body'] . "\n";
+            }
         } else {
             echo "Sucesso Global Search: " . ($global_search['paging']['total'] ?? 0) . " resultados encontrados.\n";
         }
@@ -74,6 +78,9 @@ foreach ($accounts as $account) {
         $global_search_no_token = $api_handler->api_request("/sites/{$site_id}/search", 'GET', array('q' => 'teste', 'limit' => 1), '');
         if (is_wp_error($global_search_no_token)) {
             echo "ERRO Global Search (Sem Token): " . $global_search_no_token->get_error_message() . " (Status: " . ($global_search_no_token->get_error_data()['status'] ?? 'N/A') . ")\n";
+             if (isset($global_search_no_token->get_error_data()['body'])) {
+                echo "Body: " . $global_search_no_token->get_error_data()['body'] . "\n";
+            }
         } else {
             echo "Sucesso Global Search (Sem Token): " . ($global_search_no_token['paging']['total'] ?? 0) . " resultados encontrados.\n";
         }
