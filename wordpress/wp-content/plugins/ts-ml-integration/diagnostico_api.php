@@ -60,14 +60,16 @@ foreach ($accounts as $account) {
             }
         }
 
-        // 3. Test Global Search endpoint
+        // 3. Test Global Search endpoint (often 403 - ML restricts this public endpoint)
         $site_id = $user_info['site_id'] ?? 'MLB';
         echo "Chamando /sites/{$site_id}/search?q=teste (COM TOKEN)...\n";
         $global_search = $api_handler->api_request("/sites/{$site_id}/search", 'GET', array('q' => 'teste', 'limit' => 1), $token);
         if (is_wp_error($global_search)) {
-            echo "ERRO Global Search: " . $global_search->get_error_message() . " (Status: " . ($global_search->get_error_data()['status'] ?? 'N/A') . ")\n";
-            // Check if we have more info
-            if (isset($global_search->get_error_data()['body'])) {
+            $status = $global_search->get_error_data()['status'] ?? 'N/A';
+            echo "AVISO Global Search (403 é comum): " . $global_search->get_error_message() . " (Status: {$status})\n";
+            if ($status == 403) {
+                echo "(O endpoint de busca pública da API ML costuma retornar 403; não afeta listagem dos seus itens.)\n";
+            } elseif (isset($global_search->get_error_data()['body'])) {
                 echo "Body: " . $global_search->get_error_data()['body'] . "\n";
             }
         } else {
@@ -77,12 +79,25 @@ foreach ($accounts as $account) {
         echo "Chamando /sites/{$site_id}/search?q=teste (SEM TOKEN)...\n";
         $global_search_no_token = $api_handler->api_request("/sites/{$site_id}/search", 'GET', array('q' => 'teste', 'limit' => 1), '');
         if (is_wp_error($global_search_no_token)) {
-            echo "ERRO Global Search (Sem Token): " . $global_search_no_token->get_error_message() . " (Status: " . ($global_search_no_token->get_error_data()['status'] ?? 'N/A') . ")\n";
-             if (isset($global_search_no_token->get_error_data()['body'])) {
+            $status_nt = $global_search_no_token->get_error_data()['status'] ?? 'N/A';
+            echo "AVISO Global Search sem token (403 é comum): " . $global_search_no_token->get_error_message() . " (Status: {$status_nt})\n";
+            if ($status_nt != 403 && isset($global_search_no_token->get_error_data()['body'])) {
                 echo "Body: " . $global_search_no_token->get_error_data()['body'] . "\n";
             }
         } else {
             echo "Sucesso Global Search (Sem Token): " . ($global_search_no_token['paging']['total'] ?? 0) . " resultados encontrados.\n";
+        }
+
+        // 4. Test Public Item access
+        echo "Chamando /items/MLB3531940984 (PÚBLICO)...\n";
+        $public_item = $api_handler->api_request("/items/MLB3531940984", 'GET', array(), '');
+        if (is_wp_error($public_item)) {
+            echo "ERRO Item Público: " . $public_item->get_error_message() . " (Status: " . ($public_item->get_error_data()['status'] ?? 'N/A') . ")\n";
+            if (isset($public_item->get_error_data()['body'])) {
+                echo "Body: " . $public_item->get_error_data()['body'] . "\n";
+            }
+        } else {
+            echo "Sucesso Item Público: " . ($public_item['title'] ?? 'Sem título') . "\n";
         }
     }
     echo "----------------------------------------\n\n";

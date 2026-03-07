@@ -301,6 +301,7 @@ class TS_ML_Admin
 
         $items_to_fetch = array();
         $paging_info = array('total' => 0, 'offset' => $offset, 'limit' => $limit);
+        $search_scope_message = '';
 
         if ($search_type === 'account' && empty($search_query)) {
             // 2a. Search items from MY account
@@ -322,17 +323,13 @@ class TS_ML_Admin
                 $items_to_fetch = array($matches[0]);
                 $paging_info['total'] = 1;
             } else {
-                // Keyword search
+                // Keyword search: try global /sites/MLB/search first; if 403, search within account items
                 $search_params = array(
                     'q' => $search_query,
                     'offset' => $offset,
                     'limit' => $limit,
                 );
-                
-                // For global search, we DON'T send the access token as it often causes 403 Forbidden 
-                // on many accounts/apps that don't have the explicit global search scope.
                 $search_token = ($search_type === 'account') ? $access_token : '';
-
                 if ($search_type === 'account') {
                     $search_params['seller_id'] = $user_id;
                 }
@@ -340,21 +337,33 @@ class TS_ML_Admin
                 $search_results = $api_handler->api_request("/sites/{$site_id}/search", 'GET', $search_params, $search_token);
 
                 if (is_wp_error($search_results)) {
-                    wp_send_json_error($search_results->get_error_message());
-                }
-
-                $items_to_fetch = array();
-                if (!empty($search_results['results'])) {
-                    foreach ($search_results['results'] as $res) {
-                        $items_to_fetch[] = $res['id'];
+                    $status = (int) ($search_results->get_error_data()['status'] ?? 0);
+                    if ($status === 403) {
+                        // API ML retorna 403 na busca global; buscar por palavra nos itens da conta
+                        $items_to_fetch = $this->search_keyword_in_account_items($api_handler, $access_token, $user_id, $search_query, $offset, $limit, $paging_info);
+                        $search_scope_message = __('A busca foi feita nos seus anúncios (a API do Mercado Livre não permite busca no catálogo neste app).', 'ts-ml-integration');
+                    } else {
+                        wp_send_json_error($search_results->get_error_message());
                     }
+                } else {
+                    $items_to_fetch = array();
+                    if (!empty($search_results['results'])) {
+                        foreach ($search_results['results'] as $res) {
+                            $items_to_fetch[] = is_array($res) ? ($res['id'] ?? '') : $res;
+                        }
+                        $items_to_fetch = array_filter($items_to_fetch);
+                    }
+                    $paging_info = $search_results['paging'];
                 }
-                $paging_info = $search_results['paging'];
             }
         }
 
         if (empty($items_to_fetch)) {
-            wp_send_json_success(array('results' => array(), 'paging' => $paging_info));
+            $payload = array('results' => array(), 'paging' => $paging_info);
+            if (!empty($search_scope_message)) {
+                $payload['search_scope_message'] = $search_scope_message;
+            }
+            wp_send_json_success($payload);
         }
 
         // 3. Get multiget items data
@@ -396,10 +405,66 @@ class TS_ML_Admin
             );
         }
 
-        wp_send_json_success(array(
-            'results' => $formatted_results,
-            'paging' => $paging_info
-        ));
+        $payload = array('results' => $formatted_results, 'paging' => $paging_info);
+        if (!empty($search_scope_message)) {
+            $payload['search_scope_message'] = $search_scope_message;
+        }
+        wp_send_json_success($payload);
+    }
+
+    /**
+     * When /sites/MLB/search returns 403, search by keyword within account items via /users/ID/items/search + filter.
+     *
+     * @param TS_ML_API_Handler $api_handler
+     * @param string            $access_token
+     * @param string|int        $user_id
+     * @param string            $search_query
+     * @param int               $offset
+     * @param int               $limit
+     * @param array             $paging_info By reference; will set total, offset, limit.
+     * @return array Item IDs to fetch.
+     */
+    private function search_keyword_in_account_items($api_handler, $access_token, $user_id, $search_query, $offset, $limit, &$paging_info)
+    {
+        $paging_info = array('total' => 0, 'offset' => $offset, 'limit' => $limit);
+        $max_items_to_scan = 500; // Buscar nos primeiros N itens da conta
+        $search_params = array('offset' => 0, 'limit' => $max_items_to_scan);
+        $search_results = $api_handler->api_request('/users/' . $user_id . '/items/search', 'GET', $search_params, $access_token);
+        if (is_wp_error($search_results) || empty($search_results['results'])) {
+            return array();
+        }
+        $all_ids = $search_results['results'];
+        if (empty($all_ids)) {
+            return array();
+        }
+        $chunk_size = 50;
+        $matched_ids = array();
+        $query_lower = mb_strtolower($search_query);
+        for ($i = 0; $i < count($all_ids); $i += $chunk_size) {
+            $chunk = array_slice($all_ids, $i, $chunk_size);
+            if (empty($chunk)) {
+                break;
+            }
+            $items_data = $api_handler->api_request('/items', 'GET', array('ids' => implode(',', $chunk)), $access_token);
+            if (is_wp_error($items_data) || !is_array($items_data)) {
+                continue;
+            }
+            foreach ($items_data as $item_resp) {
+                $body = isset($item_resp['body']) ? $item_resp['body'] : $item_resp;
+                if (!is_array($body)) {
+                    continue;
+                }
+                $title = isset($body['title']) ? mb_strtolower($body['title']) : '';
+                $id = isset($body['id']) ? $body['id'] : '';
+                $sku = isset($body['seller_custom_field']) ? mb_strtolower((string) $body['seller_custom_field']) : '';
+                if ($query_lower === '' || strpos($title, $query_lower) !== false || strpos($sku, $query_lower) !== false || strpos((string) $id, $search_query) !== false) {
+                    $matched_ids[] = $id;
+                }
+            }
+        }
+        $paging_info['total'] = count($matched_ids);
+        $items_to_fetch = array_slice($matched_ids, $offset, $limit);
+        return $items_to_fetch;
     }
 
     /**

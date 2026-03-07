@@ -119,6 +119,10 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 if(response.success) {
+                    if (response.data.search_scope_message) {
+                        $('#ts-ml-search-notice').remove();
+                        $('.tablenav.top').first().after('<p id="ts-ml-search-notice" class="notice notice-info" style="margin: 10px 0;">' + response.data.search_scope_message + '</p>');
+                    }
                     renderTable(response.data.results);
                     currentPage = page;
                     updatePagination(response.data.paging);
