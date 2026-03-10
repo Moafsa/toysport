@@ -317,9 +317,20 @@ class TS_ML_Admin
                 $paging_info = $search_results['paging'];
             }
         } else {
-            // 2b. GLOBAL SEARCH or Filtered Account Search
-            // If search_query contains a ML URL or ID like MLB123456
-            if (preg_match('/(MLB|MLM|MLA|MCO|MLC|MLU|MLV|MPE|MEC|MGT|MNI|MPY|MCR|MSV|MPA|MBO)\d+/', $search_query, $matches)) {
+            // 2b. GLOBAL SEARCH, Link Search or Filtered Account Search
+            
+            // Check if search_query is a ML Search URL
+            if (strpos($search_query, 'mercadolivre.com.br/') !== false && (strpos($search_query, '/lista') !== false || strpos($search_query, '_DisplayType_') !== false)) {
+                $scraper = TS_ML_Scraper::instance();
+                $search_results = $scraper->scrape_search_results($search_query);
+                
+                if (!is_wp_error($search_results) && !empty($search_results)) {
+                    $items_to_fetch = array_slice($search_results, $offset, $limit);
+                    $paging_info['total'] = count($search_results);
+                }
+            } 
+            // If already an ID or Product Link
+            elseif (preg_match('/(MLB|MLM|MLA|MCO|MLC|MLU|MLV|MPE|MEC|MGT|MNI|MPY|MCR|MSV|MPA|MBO)\d+/', $search_query, $matches)) {
                 $items_to_fetch = array($matches[0]);
                 $paging_info['total'] = 1;
             } else {

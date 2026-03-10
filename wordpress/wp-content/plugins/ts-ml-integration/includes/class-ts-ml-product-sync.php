@@ -172,9 +172,17 @@ class TS_ML_Product_Sync
         // Get Item Data
         $ml_product_data = $api_handler->api_request('/items/' . $ml_item_id, 'GET', array(), $access_token);
 
+        // FALLBACK: If API fails (403 or not found), try Scraping
         if (is_wp_error($ml_product_data)) {
-            TS_ML_Logger::error('Erro ao buscar dados do produto no ML', array('error' => $ml_product_data->get_error_message()));
-            return false;
+            TS_ML_Logger::info('API falhou ou negou acesso. Tentando Scraping...', array('ml_id' => $ml_item_id));
+            $scraper = TS_ML_Scraper::instance();
+            $scraped_data = $scraper->scrape_product($ml_item_id);
+            
+            if (is_wp_error($scraped_data)) {
+                TS_ML_Logger::error('Scraping também falhou.', array('error' => $scraped_data->get_error_message()));
+                return false;
+            }
+            $ml_product_data = $scraped_data;
         }
 
         // Check if exists by SKU or Sync Record

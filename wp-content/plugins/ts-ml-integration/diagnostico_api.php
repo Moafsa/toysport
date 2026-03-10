@@ -84,6 +84,18 @@ foreach ($accounts as $account) {
         } else {
             echo "Sucesso Global Search (Sem Token): " . ($global_search_no_token['paging']['total'] ?? 0) . " resultados encontrados.\n";
         }
+
+        // 4. Test Public Item access
+        echo "Chamando /items/MLB3531940984 (PÚBLICO)...\n";
+        $public_item = $api_handler->api_request("/items/MLB3531940984", 'GET', array(), '');
+        if (is_wp_error($public_item)) {
+            echo "ERRO Item Público: " . $public_item->get_error_message() . " (Status: " . ($public_item->get_error_data()['status'] ?? 'N/A') . ")\n";
+            if (isset($public_item->get_error_data()['body'])) {
+                echo "Body: " . $public_item->get_error_data()['body'] . "\n";
+            }
+        } else {
+            echo "Sucesso Item Público: " . ($public_item['title'] ?? 'Sem título') . "\n";
+        }
     }
     echo "----------------------------------------\n\n";
 }

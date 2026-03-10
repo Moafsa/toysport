@@ -185,6 +185,7 @@ function ts_ml_load_dependencies()
         'class-ts-ml-shipping-manager.php',
         'class-ts-ml-shipping-method.php',
         'class-ts-ml-ai-integration.php',
+        'class-ts-ml-scraper.php',
         'class-ts-ml-catalog-manager.php',
         'class-ts-ml-reports.php',
         'class-ts-ml-category-mapper.php',
@@ -381,6 +382,11 @@ final class TS_ML_Integration
         // Initialize AI Integration
         if (class_exists('TS_ML_AI_Integration')) {
             TS_ML_AI_Integration::instance();
+        }
+
+        // Initialize Scraper
+        if (class_exists('TS_ML_Scraper')) {
+            TS_ML_Scraper::instance();
         }
 
         // Initialize Catalog Manager
